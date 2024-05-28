@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Learning masks</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <style>
+        html {
+            user-select: none;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            align-content: center;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            align-content: center;
+            flex-direction: row;
+            gap: 10px;
+        }
+
+        main {
+        }
+
+        #imageContainer {
+            position: relative;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+            max-width: 100%;
+            max-height: 80vh;
+            border: 1px solid #ccc;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center center;
+        }
+
+        #imageContainer canvas {
+            cursor: auto;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .file, .title {
+            margin-bottom: 0 !important;
+        }
+    </style>
+</head>
+<body>
+<nav>
+    <h1 class="title"><i class="fa-solid fa-mask"></i>&nbsp;Learning masks</h1>
+    <div class="actions">
+        <div id="file-container" class="file">
+            <label class="file-label">
+                <input id="file" class="file-input" type="file"/>
+                <span class="file-cta">
+                  <span class="file-icon"><i class="fas fa-upload"></i></span>
+                  <span class="file-label"> Sélectionne ton image </span>
+                </span>
+            </label>
+        </div>
+        <button id="clear-all" type="button" class="is-hidden button"><i class="fa-solid fa-rotate"></i>&nbsp;Supprimer
+            toutes
+            les zones
+        </button>
+        <button id="clear" type="button" class="is-hidden button"><i class="fa-solid fa-eraser"></i>&nbsp;Cliquer
+            sur des
+            zones pour les supprimer
+        </button>
+    </div>
+</nav>
+<main>
+    <div id="imageContainer" class="is-hidden"></div>
+</main>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const _URL = window.URL || window.webkitURL;
+        const clearAllButton = document.querySelector('#clear-all');
+        const clearButton = document.querySelector('#clear');
+        const imageContainer = document.querySelector('#imageContainer');
+        let canvas, ctx;
+        let drawnZones = [];
+        let clearMode = false;
+        let dragging = false;
+        let moved = false;
+        let dragStart = {};
+        let dragEnd = {};
+
+        function setDefaultCursor() {
+            canvas.style.cursor = 'auto';
+        }
+
+        function setClearCursor() {
+            canvas.style.cursor = 'url(./eraser.svg), auto';
+        }
+
+        function setDrawCursor() {
+            canvas.style.cursor = 'url(./draw.svg), auto';
+        }
+
+        function setToggleCursor() {
+            canvas.style.cursor = 'url(./toggle.svg), auto';
+        }
+
+        function setCursor(e) {
+            if (isHoverZone(e)) {
+                if (clearMode) {
+                    setClearCursor();
+                } else if (dragging) {
+                    setDrawCursor();
+                } else if (!dragging) {
+                    setToggleCursor();
+                }
+            } else {
+                if (clearMode) {
+                    setDefaultCursor();
+                } else {
+                    setDrawCursor();
+                }
+            }
+        }
+
+        document.querySelector("#file").addEventListener('change', function (e) {
+            let image, file;
+            if (this.files[0]) {
+                file = this.files[0];
+                image = new Image();
+                image.onload = function () {
+                    const src = this.src;
+                    imageContainer.style.backgroundImage = `url(${src})`;
+                    e.preventDefault();
+                }
+                image.src = _URL.createObjectURL(file);
+                setTimeout(() => {
+                    clearAll();
+                    imageContainer.style.height = image.height + 'px';
+                    imageContainer.style.width = image.width + 'px';
+                    generateCanvas();
+                }, 50);
+            }
+        });
+
+        function clearAllButtonClickHandler() {
+            clearAll();
+        }
+
+        function clearAll() {
+            clearCanvas();
+            drawnZones = [];
+            clearAllButton.classList.add('is-hidden');
+            clearButton.classList.add('is-hidden');
+        }
+
+        function clearButtonClickHandler() {
+            clearMode = !clearMode;
+            if (clearMode === true) {
+                clearButton.classList.add('is-danger');
+            }
+            if (clearMode === false) {
+                clearButton.classList.remove('is-danger');
+            }
+            refreshCanvas();
+        }
+
+        function clearCanvas() {
+            ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function refreshCanvas() {
+            clearCanvas();
+
+            drawnZones.forEach(function (zone) {
+                const alpha = zone.isShown ? 1 : 0;
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = clearMode ? 'red' : 'rgb(0, 0, 0)';
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+                ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+            })
+        }
+
+        function isPointInZone(x, y, zone) {
+            return (x >= zone.x && x <= zone.x + zone.w) &&
+                (y >= zone.y && y <= zone.y + zone.h);
+        }
+
+        function getMousePosition(e) {
+            const zone = canvas.getBoundingClientRect();
+            const x = e.clientX - zone.left;
+            const y = e.clientY - zone.top;
+            return {x, y};
+        }
+
+        function getHoveredZone(e) {
+            const {x, y} = getMousePosition(e);
+            return drawnZones.find((zone) => {
+                return isPointInZone(x, y, zone);
+            });
+        }
+
+        function isHoverZone(e) {
+            const foundZone = getHoveredZone(e);
+
+            return !!foundZone;
+        }
+
+        function generateCanvas() {
+            imageContainer.classList.remove('is-hidden');
+            clearAllButton.removeEventListener('click', clearAllButtonClickHandler);
+            clearButton.removeEventListener('click', clearButtonClickHandler);
+            document.querySelector('#file-container span.file-label').innerHTML = 'Sélectionne une nouvelle image';
+
+            document.querySelector('canvas')?.remove();
+
+            canvas = document.createElement('canvas');
+            canvas.width = imageContainer.clientWidth;
+            canvas.height = imageContainer.clientHeight;
+            ctx = canvas.getContext('2d');
+
+            imageContainer.appendChild(canvas);
+
+            clearAllButton.addEventListener('click', clearAllButtonClickHandler);
+            clearButton.addEventListener('click', clearButtonClickHandler);
+
+            let canvasOffset = {
+                x: canvas.offsetParent.offsetLeft,
+                y: canvas.offsetParent.offsetTop,
+            };
+
+            canvas.addEventListener('click', function (e) {
+                if (dragging || moved) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    return;
+                }
+
+                const clickedZone = getHoveredZone(e);
+
+                if (clearMode) {
+                    drawnZones = drawnZones.filter((zone) => {
+                        return clickedZone !== zone;
+                    });
+                    refreshCanvas();
+                    if (drawnZones.length === 0) {
+                        clearAllButton.classList.add('is-hidden');
+                        clearButton.classList.add('is-hidden');
+                        clearButton.classList.remove('is-danger');
+                        clearMode = false;
+                    }
+                    return;
+                }
+
+                if (clickedZone) {
+                    clickedZone.isShown = !clickedZone.isShown;
+                    refreshCanvas();
+                }
+            });
+
+            canvas.addEventListener('mousedown', function (e) {
+                dragStart = {
+                    x: e.clientX - canvasOffset.x,
+                    y: e.clientY - canvasOffset.y,
+                };
+                moved = false;
+                if (clearMode) {
+                    return;
+                }
+                dragging = true;
+            });
+
+            canvas.addEventListener('mouseup', function (e) {
+                if (!dragging || clearMode) return
+                dragEnd = {
+                    x: e.clientX - canvasOffset.x,
+                    y: e.clientY - canvasOffset.y,
+                };
+                let diff = {
+                    x: dragEnd.x - dragStart.x,
+                    y: dragEnd.y - dragStart.y,
+                };
+
+                if (Math.abs(diff.x) < 2 && Math.abs(diff.y) < 2) {
+                    moved = false;
+                } else {
+                    drawnZones.push({
+                        x: dragStart.x,
+                        y: dragStart.y,
+                        w: diff.x,
+                        h: diff.y,
+                        isShown: true,
+                    });
+                    if (drawnZones.length === 1) {
+                        clearAllButton.classList.remove('is-hidden');
+                        clearButton.classList.remove('is-hidden');
+                    }
+                    moved = true;
+                }
+
+                refreshCanvas();
+                dragging = false;
+            });
+
+            canvas.addEventListener('mousemove', function (e) {
+                setCursor(e);
+                if (!dragging || clearMode) return;
+
+                moved = true;
+                let current = {
+                    x: e.clientX - canvasOffset.x,
+                    y: e.clientY - canvasOffset.y,
+                };
+                let diff = {
+                    x: current.x - dragStart.x,
+                    y: current.y - dragStart.y,
+                };
+
+                refreshCanvas();
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.lineWidth = 3;
+                ctx.rect(dragStart.x, dragStart.y, diff.x, diff.y);
+                ctx.strokeStyle = 'rgb(0, 0, 0)';
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            canvas.addEventListener('mouseleave', function () {
+                if (!dragging || clearMode) return;
+
+                refreshCanvas();
+                dragging = false;
+                moved = false;
+            });
+        }
+    });
+
+</script>
+</body>
+</html>
