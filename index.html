@@ -71,14 +71,10 @@
                 </span>
             </label>
         </div>
-        <button id="clear-all" type="button" class="is-hidden button"><i class="fa-solid fa-rotate"></i>&nbsp;Supprimer
-            toutes
-            les zones
-        </button>
-        <button id="clear" type="button" class="is-hidden button"><i class="fa-solid fa-eraser"></i>&nbsp;Cliquer
-            sur des
-            zones pour les supprimer
-        </button>
+        <button id="draw" type="button" class="is-hidden button"><i class="fa-solid fa-pencil"></i></button>
+        <button id="learn" type="button" class="is-hidden button"><i class="fa-solid fa-eye-slash"></i></button>
+        <button id="clear" type="button" class="is-hidden button"><i class="fa-solid fa-eraser"></i></button>
+        <button id="clear-all" type="button" class="is-hidden button is-danger"><i class="fa-solid fa-rotate"></i></button>
     </div>
 </nav>
 <main>
@@ -91,8 +87,12 @@
         //  drawMode
         //  learnMode
         //  cleanMode
+        // ajouter le bouton pour dessiner
+        // learn mode = l'oeil
         const clearAllButton = document.querySelector('#clear-all');
         const clearButton = document.querySelector('#clear');
+        const drawButton = document.querySelector('#draw');
+        const learnButton = document.querySelector('#learn');
         const imageContainer = document.querySelector('#imageContainer');
         let canvas, ctx;
         let drawnZones = [];
@@ -100,7 +100,9 @@
         let drawEnd = {};
         let moved = false;
 
-        let clearing = false;
+        let drawMode = false;
+        let learnMode = false;
+        let clearMode = false;
         let drawing = false;
 
         document.querySelector("#file").addEventListener('change', uploadFileHandler);
@@ -117,21 +119,22 @@
 
                 const clickedZone = getHoveredZone(e);
 
-                if (clearing) {
+                if (clearMode) {
                     drawnZones = drawnZones.filter((zone) => {
                         return clickedZone !== zone;
                     });
                     refreshCanvas();
                     if (drawnZones.length === 0) {
+                        learnButton.classList.add('is-hidden');
                         clearAllButton.classList.add('is-hidden');
                         clearButton.classList.add('is-hidden');
-                        clearButton.classList.remove('is-danger');
-                        clearing = false;
+                        clearButton.classList.remove('is-warning');
+                        clearMode = false;
                     }
                     return;
                 }
 
-                if (clickedZone) {
+                if (clickedZone && learnMode) {
                     clickedZone.isShown = !clickedZone.isShown;
                     refreshCanvas();
                 }
@@ -143,14 +146,14 @@
                     y: e.clientY - canvasOffset.y,
                 };
                 moved = false;
-                if (clearing) {
+                if (clearMode) {
                     return;
                 }
                 drawing = true;
             });
 
             canvas.addEventListener('mouseup', function (e) {
-                if (!drawing || clearing) return
+                if (!drawing || clearMode) return
                 drawEnd = {
                     x: e.clientX - canvasOffset.x,
                     y: e.clientY - canvasOffset.y,
@@ -173,6 +176,7 @@
                     if (drawnZones.length === 1) {
                         clearAllButton.classList.remove('is-hidden');
                         clearButton.classList.remove('is-hidden');
+                        learnButton.classList.remove('is-hidden');
                     }
                     moved = true;
                 }
@@ -183,7 +187,7 @@
 
             canvas.addEventListener('mousemove', function (e) {
                 setCursor(e);
-                if (!drawing || clearing) return;
+                if (!drawing || clearMode) return;
 
                 moved = true;
                 let current = {
@@ -207,7 +211,7 @@
             });
 
             canvas.addEventListener('mouseleave', function () {
-                if (!drawing || clearing) return;
+                if (!drawing || clearMode) return;
 
                 refreshCanvas();
                 drawing = false;
@@ -216,12 +220,17 @@
 
             function initializeCanvas() {
                 clearAll();
+                drawButton.classList.remove('is-hidden');
                 clearAllButton.removeEventListener('click', clearAllButtonClickHandler);
                 clearButton.removeEventListener('click', clearButtonClickHandler);
+                learnButton.removeEventListener('click', learnButtonClickHandler);
+                drawButton.removeEventListener('click', drawButtonClickHandler);
                 document.querySelector('canvas')?.remove();
 
                 clearAllButton.addEventListener('click', clearAllButtonClickHandler);
                 clearButton.addEventListener('click', clearButtonClickHandler);
+                learnButton.addEventListener('click', learnButtonClickHandler);
+                drawButton.addEventListener('click', drawButtonClickHandler);
                 document.querySelector('#file-container span.file-label').innerHTML = 'Sélectionne une nouvelle image';
                 imageContainer.classList.remove('is-hidden');
 
@@ -276,18 +285,22 @@
 
         function setCursor(e) {
             if (isHoverZone(e)) {
-                if (clearing) {
+                if (clearMode) {
                     setClearCursor();
-                } else if (drawing) {
+                } else if (drawMode) {
                     setDrawCursor();
-                } else if (!drawing) {
+                } else if (learnMode) {
                     setToggleCursor();
                 }
             } else {
-                if (clearing) {
+                if (clearMode) {
                     setDefaultCursor();
-                } else {
+                } else if (drawMode) {
                     setDrawCursor();
+                } else if (learnMode) {
+                    setToggleCursor();
+                } else {
+                    setDefaultCursor();
                 }
             }
         }
@@ -296,20 +309,41 @@
             clearAll();
         }
 
+        function learnButtonClickHandler() {
+            learnMode = !learnMode;
+            if (learnMode === true) {
+                learnButton.classList.add('is-info');
+            }
+            if (learnMode === false) {
+                learnButton.classList.remove('is-info');
+            }
+        }
+
+        function drawButtonClickHandler() {
+            drawMode = !drawMode;
+            if (drawMode === true) {
+                drawButton.classList.add('is-info');
+            }
+            if (drawMode === false) {
+                drawButton.classList.remove('is-info');
+            }
+        }
+
         function clearAll() {
             clearCanvas();
             drawnZones = [];
             clearAllButton.classList.add('is-hidden');
             clearButton.classList.add('is-hidden');
+            learnButton.classList.add('is-hidden');
         }
 
         function clearButtonClickHandler() {
-            clearing = !clearing;
-            if (clearing === true) {
-                clearButton.classList.add('is-danger');
+            clearMode = !clearMode;
+            if (clearMode === true) {
+                clearButton.classList.add('is-warning');
             }
-            if (clearing === false) {
-                clearButton.classList.remove('is-danger');
+            if (clearMode === false) {
+                clearButton.classList.remove('is-warning');
             }
             refreshCanvas();
         }
@@ -324,7 +358,7 @@
             drawnZones.forEach(function (zone) {
                 const alpha = zone.isShown ? 1 : 0;
                 ctx.lineWidth = 3;
-                ctx.strokeStyle = clearing ? 'red' : 'rgb(0, 0, 0)';
+                ctx.strokeStyle = clearMode ? 'orange' : 'rgb(0, 0, 0)';
                 ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
                 ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
                 ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
